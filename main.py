@@ -2,11 +2,14 @@ import requests
 from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 import tkinter as tk
-from tkinter import Label, Button, Frame, simpledialog
-from logger import start_logging  # Ensure correct import
+from tkinter import Label, Frame, simpledialog
+from tkinter import *
+from logger import start_logging
+import time
 
 # Configuration
 UPDATE_INTERVAL = 1  # in seconds
+FLASH_INTERVAL = 2000  # in milliseconds (for flashing text)
 
 class Camera:
     def __init__(self, ip, username, password):
@@ -52,83 +55,106 @@ class Camera:
 
 # GUI Application
 class Dashboard:
-    def __init__(self, master, cameras):
+    def __init__(self, master, cameras, occupancy_limit=None):
         self.master = master
         self.master.title("People Counting Dashboard")
-        self.master.configure(bg="#002366")
+        self.master.configure(bg="#d1d07d")
         self.cameras = cameras
+        self.occupancy_limit = occupancy_limit
+        self.flash_state = False  # This is used to track the flashing state
 
-        self.frames = []
-        self.camera_labels = []
+        # Create the total occupancy display with full width and solid background from top down
+        self.total_frame = Frame(master, bg="#72a160", bd=0, relief="ridge")
+        self.total_frame.grid(row=0, column=0, columnspan=len(self.cameras), sticky="nsew", padx=0, pady=0)
 
-        for i, camera in enumerate(self.cameras):
-            frame = Frame(master, bg="black", bd=5, relief="ridge")
-            frame.grid(row=0, column=i, sticky="nsew", padx=10, pady=10)
-
-            cam_label = {
-                'entered': Label(frame, text=f"Camera {i + 1} Entered: 0", bg="#ffd700", fg="black", font=("Helvetica", 12)),
-                'exited': Label(frame, text=f"Camera {i + 1} Exited: 0", bg="#ff0000", fg="white", font=("Helvetica", 12)),
-                'currently_in': Label(frame, text=f"Camera {i + 1} Currently In: 0", bg="#00ff00", fg="black", font=("Helvetica", 12))
-            }
-            cam_label['entered'].pack(fill="x", padx=5, pady=5)
-            cam_label['exited'].pack(fill="x", padx=5, pady=5)
-            cam_label['currently_in'].pack(fill="x", padx=5, pady=5)
-
-            self.frames.append(frame)
-            self.camera_labels.append(cam_label)
-
-        total_frame = Frame(master, bg="black", bd=5, relief="ridge")
-        total_frame.grid(row=1, column=0, columnspan=len(self.cameras), sticky="nsew", padx=10, pady=10)
-
-        self.total_entered_label = Label(total_frame, text="Total Entered: 0", bg="#ffd700", fg="black", font=("Helvetica", 16))
-        self.total_entered_label.pack(fill="x", padx=5, pady=5)
-
-        self.total_exited_label = Label(total_frame, text="Total Exited: 0", bg="#ff0000", fg="white", font=("Helvetica", 16))
-        self.total_exited_label.pack(fill="x", padx=5, pady=5)
-
-        self.total_currently_in_label = Label(total_frame, text="Total Currently In: 0", bg="#00ff00", fg="black", font=("Helvetica", 16))
+        self.total_currently_in_label = Label(self.total_frame, text="Current Occupancy: 0", bg="#72a160", fg="white", font=("Helvetica", 24))
         self.total_currently_in_label.pack(fill="x", padx=5, pady=5)
 
-        self.reset_button = Button(master, text="Reset", command=self.reset_counts, bg="gray", fg="white", font=("Helvetica", 12))
-        self.reset_button.grid(row=2, column=0, columnspan=len(self.cameras), pady=10)
+        if self.occupancy_limit:
+            self.occupancy_limit_label = Label(self.total_frame, text=f"Occupancy Limit: {self.occupancy_limit}", bg="#72a160", fg="white", font=("Helvetica", 12))
+            self.occupancy_limit_label.pack(side="bottom", pady=5)
 
-        for i in range(len(self.cameras)):
-            master.grid_columnconfigure(i, weight=1, uniform="column")
-        master.grid_rowconfigure(0, weight=1)
-        master.grid_rowconfigure(1, weight=1)
+        # Create camera info frames with pastel orange and updated labels
+        self.camera_frames = []
+        self.camera_labels = []
 
+        self.create_camera_boxes()
         self.update_counts()
 
+    def create_camera_boxes(self):
+        """Create dynamically arranged camera info boxes."""
+        num_cameras = len(self.cameras)
+        columns = min(num_cameras, 4)
+        for i, camera in enumerate(self.cameras):
+            frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
+            frame.grid(row=(i // columns) + 1, column=i % columns, sticky="nsew", padx=10, pady=10)
+
+            cam_label = {
+                'ip': Label(frame, text=f"Camera {i + 1}", bg="#FF964F", fg="white", font=("Helvetica", 12, "bold")),
+                'entered': Label(frame, text="Entered: 0", bg="#FF964F", fg="white", font=("Helvetica", 12, "bold")),
+                'exited': Label(frame, text="Exited: 0", bg="#FF964F", fg="white", font=("Helvetica", 12, "bold")),
+            }
+            cam_label['ip'].pack(fill="x", padx=5, pady=5)
+            cam_label['entered'].pack(fill="x", padx=5, pady=5)
+            cam_label['exited'].pack(fill="x", padx=5, pady=5)
+
+            self.camera_frames.append(frame)
+            self.camera_labels.append(cam_label)
+
+        # Dynamically adjust column weight based on the number of cameras
+        for i in range(columns):
+            self.master.grid_columnconfigure(i, weight=1, uniform="column")
+
     def update_counts(self):
-        total_entered = 0
-        total_exited = 0
         total_currently_in = 0
 
         for i, camera in enumerate(self.cameras):
             entered, exited, currently_in = camera.get_counts()
-            total_entered += entered
-            total_exited += exited
             total_currently_in += currently_in
 
-            self.camera_labels[i]['entered'].config(text=f"Camera {i + 1} Entered: {entered}")
-            self.camera_labels[i]['exited'].config(text=f"Camera {i + 1} Exited: {exited}")
-            self.camera_labels[i]['currently_in'].config(text=f"Camera {i + 1} Currently In: {currently_in}")
+            self.camera_labels[i]['entered'].config(text=f"Entered: {entered}")
+            self.camera_labels[i]['exited'].config(text=f"Exited: {exited}")
 
-        self.total_entered_label.config(text=f"Total Entered: {total_entered}")
-        self.total_exited_label.config(text=f"Total Exited: {total_exited}")
-        self.total_currently_in_label.config(text=f"Total Currently In: {total_currently_in}")
+        # Update the total occupancy box
+        self.total_currently_in_label.config(text=f"Current Occupancy: {total_currently_in}")
+        
+        # If limit is exceeded, flash red and green. Otherwise, set to normal green.
+        if self.occupancy_limit and total_currently_in > self.occupancy_limit:
+            self.flash_red_background()  # Start flashing red
+        else:
+            self.stop_flashing()
 
+        # Repeat after the update interval
         self.master.after(UPDATE_INTERVAL * 1000, self.update_counts)
 
-    def reset_counts(self):
-        for i in range(len(self.cameras)):
-            self.camera_labels[i]['entered'].config(text=f"Camera {i + 1} Entered: 0")
-            self.camera_labels[i]['exited'].config(text=f"Camera {i + 1} Exited: 0")
-            self.camera_labels[i]['currently_in'].config(text=f"Camera {i + 1} Currently In: 0")
+    def flash_red_background(self):
+        """Flash the occupancy background between red and green when over limit."""
+        # Toggle the flash state to change colors
+        if self.flash_state:
+            self.total_frame.config(bg="#eb3b3b")  # Flash red
+            self.total_currently_in_label.config(bg="#eb3b3b")
+            if self.occupancy_limit_label:
+                self.occupancy_limit_label.config(bg="#eb3b3b")
+        else:
+            self.total_frame.config(bg="#72a160")  # Flash green
+            self.total_currently_in_label.config(bg="#72a160")
+            if self.occupancy_limit_label:
+                self.occupancy_limit_label.config(bg="#72a160")
 
-        self.total_entered_label.config(text="Total Entered: 0")
-        self.total_exited_label.config(text="Total Exited: 0")
-        self.total_currently_in_label.config(text="Total Currently In: 0")
+        # Toggle the flash state
+        self.flash_state = not self.flash_state
+
+        # Set up the next flash event
+        self.master.after(500, self.flash_red_background)  # Flash every 0.5 seconds
+
+    def stop_flashing(self):
+        """Stop flashing and reset the background to green."""
+        self.flash_state = False
+        self.total_frame.config(bg="#72a160")  # Set it to green
+        self.total_currently_in_label.config(bg="#72a160")
+        if self.occupancy_limit_label:
+            self.occupancy_limit_label.config(bg="#72a160")
+
 
 
 def get_camera_details():
@@ -143,13 +169,14 @@ def get_camera_details():
         password = simpledialog.askstring("Input", f"Enter Password for Camera {i + 1}:", show="*")
         cameras.append(Camera(ip, username, password))
 
+    occupancy_limit = simpledialog.askinteger("Input", "Enter total room occupancy limit (leave blank for no limit)", parent=root)
     root.destroy()
-    return cameras
+    return cameras, occupancy_limit
 
 
 if __name__ == "__main__":
-    cameras = get_camera_details()
+    cameras, occupancy_limit = get_camera_details()
     root = tk.Tk()
-    app = Dashboard(root, cameras)
-    start_logging(cameras)  # Correctly start logging
+    app = Dashboard(root, cameras, occupancy_limit)
+    start_logging(cameras)
     root.mainloop()
