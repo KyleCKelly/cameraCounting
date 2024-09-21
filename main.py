@@ -1,15 +1,16 @@
+import time
+import json
+import os
 import requests
 from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 import tkinter as tk
-from tkinter import Label, Frame, simpledialog
-from tkinter import *
+from tkinter import Label, Frame, simpledialog, filedialog, messagebox
 from logger import start_logging
-import time
 
 # Configuration
-UPDATE_INTERVAL = 1  # in seconds
-FLASH_INTERVAL = 2000  # in milliseconds (for flashing text)
+UPDATE_INTERVAL = 2  # Check every 2 seconds
+FLASH_DURATION = 1000  # 1 second in milliseconds for flashing red
 
 class Camera:
     def __init__(self, ip, username, password):
@@ -52,7 +53,6 @@ class Camera:
             print(f"XML parse error occurred: {parse_err}")
             return 0, 0, 0
 
-
 # GUI Application
 class Dashboard:
     def __init__(self, master, cameras, occupancy_limit=None):
@@ -61,7 +61,7 @@ class Dashboard:
         self.master.configure(bg="#d1d07d")
         self.cameras = cameras
         self.occupancy_limit = occupancy_limit
-        self.flash_state = False  # This is used to track the flashing state
+        self.is_flashing = False  # Track whether we're in a flash period
 
         # Create the total occupancy display with full width and solid background from top down
         self.total_frame = Frame(master, bg="#72a160", bd=0, relief="ridge")
@@ -70,9 +70,12 @@ class Dashboard:
         self.total_currently_in_label = Label(self.total_frame, text="Current Occupancy: 0", bg="#72a160", fg="white", font=("Helvetica", 24))
         self.total_currently_in_label.pack(fill="x", padx=5, pady=5)
 
+        # Only display occupancy limit if it was provided
         if self.occupancy_limit:
             self.occupancy_limit_label = Label(self.total_frame, text=f"Occupancy Limit: {self.occupancy_limit}", bg="#72a160", fg="white", font=("Helvetica", 12))
             self.occupancy_limit_label.pack(side="bottom", pady=5)
+        else:
+            self.occupancy_limit_label = None
 
         # Create camera info frames with pastel orange and updated labels
         self.camera_frames = []
@@ -117,66 +120,79 @@ class Dashboard:
 
         # Update the total occupancy box
         self.total_currently_in_label.config(text=f"Current Occupancy: {total_currently_in}")
-        
-        # If limit is exceeded, flash red and green. Otherwise, set to normal green.
-        if self.occupancy_limit and total_currently_in > self.occupancy_limit:
-            self.flash_red_background()  # Start flashing red
-        else:
-            self.stop_flashing()
 
-        # Repeat after the update interval
+        # Check every 2 seconds and flash red for 1 second if over the limit
+        if self.occupancy_limit and total_currently_in > self.occupancy_limit:
+            if not self.is_flashing:
+                self.flash_red_background()  # Start flashing red for 1 second
+                self.is_flashing = True  # Mark that we're in a flash period
+                self.master.after(FLASH_DURATION, self.reset_to_green)  # Reset to green after 1 second
+        else:
+            self.reset_to_green()  # Ensure it's green when under limit
+
+        # Check again in 2 seconds
         self.master.after(UPDATE_INTERVAL * 1000, self.update_counts)
 
     def flash_red_background(self):
-        """Flash the occupancy background between red and green when over limit."""
-        # Toggle the flash state to change colors
-        if self.flash_state:
-            self.total_frame.config(bg="#eb3b3b")  # Flash red
-            self.total_currently_in_label.config(bg="#eb3b3b")
-            if self.occupancy_limit_label:
-                self.occupancy_limit_label.config(bg="#eb3b3b")
-        else:
-            self.total_frame.config(bg="#72a160")  # Flash green
-            self.total_currently_in_label.config(bg="#72a160")
-            if self.occupancy_limit_label:
-                self.occupancy_limit_label.config(bg="#72a160")
+        """Set the background to red when over limit."""
+        self.total_frame.config(bg="#eb3b3b")  # Flash red
+        self.total_currently_in_label.config(bg="#eb3b3b")
+        if self.occupancy_limit_label:
+            self.occupancy_limit_label.config(bg="#eb3b3b")
 
-        # Toggle the flash state
-        self.flash_state = not self.flash_state
-
-        # Set up the next flash event
-        self.master.after(500, self.flash_red_background)  # Flash every 0.5 seconds
-
-    def stop_flashing(self):
-        """Stop flashing and reset the background to green."""
-        self.flash_state = False
+    def reset_to_green(self):
+        """Reset the background to green after flashing or if occupancy is under the limit."""
+        self.is_flashing = False
         self.total_frame.config(bg="#72a160")  # Set it to green
         self.total_currently_in_label.config(bg="#72a160")
         if self.occupancy_limit_label:
             self.occupancy_limit_label.config(bg="#72a160")
 
-
+def load_config_file():
+    """Prompt user to load a config file and return camera details from the config."""
+    config_file = filedialog.askopenfilename(filetypes=[("JSON files", "*.json")])
+    if not config_file:
+        return None
+    
+    with open(config_file, 'r') as f:
+        config_data = json.load(f)
+    
+    cameras = [Camera(cam['ip'], cam['username'], cam['password']) for cam in config_data['cameras']]
+    return cameras
 
 def get_camera_details():
     root = tk.Tk()
     root.withdraw()
-    num_cameras = simpledialog.askinteger("Input", "How many cameras are you using?")
+    
+    # Ask if user wants to use a config file
+    use_config = messagebox.askyesno("Config File", "Do you want to use a config file?")
+    
+    if use_config:
+        cameras = load_config_file()
+        if not cameras:
+            messagebox.showerror("Error", "Failed to load config file.")
+            return None, None
+    else:
+        num_cameras = simpledialog.askinteger("Input", "How many cameras are you using?")
+        cameras = []
+        for i in range(num_cameras):
+            ip = simpledialog.askstring("Input", f"Enter IP for Camera {i + 1}:")
+            username = simpledialog.askstring("Input", f"Enter Username for Camera {i + 1}:")
+            password = simpledialog.askstring("Input", f"Enter Password for Camera {i + 1}:", show="*")
+            cameras.append(Camera(ip, username, password))
 
-    cameras = []
-    for i in range(num_cameras):
-        ip = simpledialog.askstring("Input", f"Enter IP for Camera {i + 1}:")
-        username = simpledialog.askstring("Input", f"Enter Username for Camera {i + 1}:")
-        password = simpledialog.askstring("Input", f"Enter Password for Camera {i + 1}:", show="*")
-        cameras.append(Camera(ip, username, password))
-
-    occupancy_limit = simpledialog.askinteger("Input", "Enter total room occupancy limit (leave blank for no limit)", parent=root)
+    occupancy_limit = simpledialog.askinteger("Input", "Enter total room occupancy limit (enter 0 for no limit)", parent=root)
+    
+    if not occupancy_limit:  # Allow user to skip entering an occupancy limit
+        occupancy_limit = None
+    
     root.destroy()
     return cameras, occupancy_limit
 
-
 if __name__ == "__main__":
     cameras, occupancy_limit = get_camera_details()
-    root = tk.Tk()
-    app = Dashboard(root, cameras, occupancy_limit)
-    start_logging(cameras)
-    root.mainloop()
+    if cameras:
+        root = tk.Tk()
+        app = Dashboard(root, cameras, occupancy_limit)
+        start_logging(cameras)
+        root.mainloop()

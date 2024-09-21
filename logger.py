@@ -49,7 +49,7 @@ class Logger:
             time.sleep(1)
 
     def check_midnight(self):
-        while True:
+        while True: 
             now = datetime.now()
             if now.hour == 0 and now.minute == 0:
                 self.create_log_file()

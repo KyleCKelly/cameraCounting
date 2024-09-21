@@ -1,0 +1,22 @@
+Camera IPs:
+Camera 1 = 10.1.1.224
+Camera 2 = 10.1.1.55
+Camera 3 = 10.1.1.58
+
+00:57:15, Camera 1, person entered (Occupancy: 1)
+00:57:15, Camera 1, person exited (Occupancy: 1)
+00:57:15, Camera 2, person entered (Occupancy: -1)
+00:57:15, Camera 2, person exited (Occupancy: -1)
+00:57:15, Camera 3, person entered (Occupancy: 0)
+00:57:15, Camera 3, person exited (Occupancy: 0)
+00:57:35, Camera 1, person exited (Occupancy: 0)
+00:57:45, Camera 2, person exited (Occupancy: -2)
+00:58:15, Camera 1, person exited (Occupancy: -1)
+00:58:18, Camera 2, person exited (Occupancy: -3)
+00:58:26, Camera 1, person entered (Occupancy: 0)
+00:58:39, Camera 1, person exited (Occupancy: -1)
+00:58:43, Camera 2, person exited (Occupancy: -4)
+01:00:06, Camera 1, person exited (Occupancy: -2)
+01:00:09, Camera 3, person exited (Occupancy: -1)
+01:08:25, Camera 3, person entered (Occupancy: 0)
+01:08:28, Camera 1, person entered (Occupancy: -1)
