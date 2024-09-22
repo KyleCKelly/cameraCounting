@@ -5,7 +5,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 import xml.etree.ElementTree as ET
 import tkinter as tk
-from tkinter import Label, Frame, simpledialog, filedialog, messagebox
+from tkinter import Label, Frame, Button, simpledialog, filedialog, messagebox
 from logger import start_logging
 
 # Configuration
@@ -55,20 +55,21 @@ class Camera:
 
 # GUI Application
 class Dashboard:
-    def __init__(self, master, cameras, occupancy_limit=None):
+    def __init__(self, master, cameras, occupancy_limit=None, logger=None):
         self.master = master
         self.master.title("People Counting Dashboard")
         self.master.configure(bg="#d1d07d")
         self.cameras = cameras
         self.occupancy_limit = occupancy_limit
+        self.logger = logger  # Store reference to the logger
         self.is_flashing = False  # Track whether we're in a flash period
 
         # Create the total occupancy display with full width and solid background from top down
         self.total_frame = Frame(master, bg="#72a160", bd=0, relief="ridge")
-        self.total_frame.grid(row=0, column=0, columnspan=len(self.cameras), sticky="nsew", padx=0, pady=0)
+        self.total_frame.grid(row=0, column=0, columnspan=len(self.cameras) + 1, sticky="nsew", padx=0, pady=0)
 
         self.total_currently_in_label = Label(self.total_frame, text="Current Occupancy: 0", bg="#72a160", fg="white", font=("Helvetica", 24))
-        self.total_currently_in_label.pack(fill="x", padx=5, pady=5)
+        self.total_currently_in_label.pack(fill="both", expand=True)
 
         # Only display occupancy limit if it was provided
         if self.occupancy_limit:
@@ -77,17 +78,31 @@ class Dashboard:
         else:
             self.occupancy_limit_label = None
 
-        # Create camera info frames with pastel orange and updated labels
+        # Dynamically adjust columns to span all cameras
+        self.master.grid_columnconfigure(0, weight=1)  # Ensure dynamic resizing of the occupancy box
+
         self.camera_frames = []
         self.camera_labels = []
 
         self.create_camera_boxes()
+        self.add_camera_button()  # Ensure the button is added here
         self.update_counts()
 
     def create_camera_boxes(self):
         """Create dynamically arranged camera info boxes."""
         num_cameras = len(self.cameras)
-        columns = min(num_cameras, 4)
+        columns = min(num_cameras + 1, 4)  # +1 to include the "Add Camera" button
+
+        # Update the span of the occupancy box to include all columns
+        self.total_frame.grid_configure(columnspan=columns)
+
+        # Reset the grid for existing cameras
+        for frame in self.camera_frames:
+            frame.grid_forget()  # Clear old frames
+
+        self.camera_frames = []  # Clear the current frames list
+        self.camera_labels = []  # Clear the camera labels list
+
         for i, camera in enumerate(self.cameras):
             frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
             frame.grid(row=(i // columns) + 1, column=i % columns, sticky="nsew", padx=10, pady=10)
@@ -108,6 +123,32 @@ class Dashboard:
         for i in range(columns):
             self.master.grid_columnconfigure(i, weight=1, uniform="column")
 
+    def add_camera_button(self):
+        """Add a button for adding a new camera."""
+        add_camera_frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
+        add_camera_frame.grid(row=(len(self.cameras) // 4) + 1, column=len(self.cameras) % 4, sticky="nsew", padx=10, pady=10)
+
+        add_camera_label = Label(add_camera_frame, text="+", bg="#FF964F", fg="white", font=("Helvetica", 36, "bold"))
+        add_camera_label.pack(fill="both", expand=True)
+
+        add_camera_button = Button(add_camera_frame, text="Add Camera", command=self.add_camera)
+        add_camera_button.pack(fill="x", padx=5, pady=5)
+
+    def add_camera(self):
+        """Prompt the user to add a new camera."""
+        ip = simpledialog.askstring("Input", "Enter IP for new Camera:")
+        username = simpledialog.askstring("Input", "Enter Username for new Camera:")
+        password = simpledialog.askstring("Input", "Enter Password for new Camera:", show="*")
+
+        if ip and username and password:
+            new_camera = Camera(ip, username, password)
+            self.cameras.append(new_camera)  # Add new camera to the list
+            self.create_camera_boxes()  # Re-create camera boxes to reflect the new addition
+
+            # Notify logger to update log for the new camera
+            if self.logger:
+                self.logger.add_camera_to_log(new_camera)  # Start logging for the new camera
+
     def update_counts(self):
         total_currently_in = 0
 
@@ -115,8 +156,10 @@ class Dashboard:
             entered, exited, currently_in = camera.get_counts()
             total_currently_in += currently_in
 
-            self.camera_labels[i]['entered'].config(text=f"Entered: {entered}")
-            self.camera_labels[i]['exited'].config(text=f"Exited: {exited}")
+            # Ensure that we don't try to update more labels than exist
+            if i < len(self.camera_labels):
+                self.camera_labels[i]['entered'].config(text=f"Entered: {entered}")
+                self.camera_labels[i]['exited'].config(text=f"Exited: {exited}")
 
         # Update the total occupancy box
         self.total_currently_in_label.config(text=f"Current Occupancy: {total_currently_in}")
@@ -193,6 +236,8 @@ if __name__ == "__main__":
     cameras, occupancy_limit = get_camera_details()
     if cameras:
         root = tk.Tk()
-        app = Dashboard(root, cameras, occupancy_limit)
-        start_logging(cameras)
+        logger = start_logging(cameras)  # Get logger reference
+        app = Dashboard(root, cameras, occupancy_limit, logger)
         root.mainloop()
+    else:
+        print("No cameras were loaded or created.")

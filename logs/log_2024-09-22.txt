@@ -1,0 +1,8 @@
+--CAMERAS--
+Camera 1 = 10.1.1.224
+Camera 2 = 10.1.1.55
+Camera 3 = 10.1.1.58
+
+--EVENTS--
+23:24:00, Camera 1, person entered (Occupancy: 4)
+23:24:00, Camera 1, person exited (Occupancy: 4)

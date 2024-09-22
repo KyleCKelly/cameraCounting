@@ -11,6 +11,10 @@ class Logger:
         self.current_log_file = None
         self.create_log_file()
         self.last_counts = [{'in': 0, 'out': 0} for _ in cameras]
+        self.logging_threads = []
+
+        for camera in cameras:
+            self.start_logging(camera)  # Start logging for each camera on initialization
 
     def create_log_file(self):
         if not os.path.exists(self.log_dir):
@@ -21,41 +25,57 @@ class Logger:
         self.current_log_file = log_filename
 
         with open(self.current_log_file, "w") as f:
-            f.write("Camera IPs:\n")
+            f.write("--CAMERAS--\n")
             for i, camera in enumerate(self.cameras):
                 f.write(f"Camera {i + 1} = {camera.ip}\n")
-            f.write("\n")
+            f.write("\n--EVENTS--\n")
 
-    def log_data(self):
+    def start_logging(self, camera):
+        """Start a logging thread for a new camera."""
+        thread = threading.Thread(target=self.log_camera_data, args=(camera,), daemon=True)
+        thread.start()
+        self.logging_threads.append(thread)
+
+    def log_camera_data(self, camera):
+        """Log the data for a specific camera."""
         while True:
             current_time = datetime.now().strftime("%H:%M:%S")
-            
-            with open(self.current_log_file, "a") as f:
-                for i, camera in enumerate(self.cameras):
-                    entered, exited, currently_in = camera.get_counts()
-                    
-                    if entered > self.last_counts[i]['in']:
-                        log_entry = f"{current_time}, Camera {i + 1}, person entered (Occupancy: {currently_in})\n"
-                        f.write(log_entry)
-                        insert_log(current_time, camera.ip, entered, self.last_counts[i]['out'], currently_in)
+            entered, exited, currently_in = camera.get_counts()
 
-                    if exited > self.last_counts[i]['out']:
-                        log_entry = f"{current_time}, Camera {i + 1}, person exited (Occupancy: {currently_in})\n"
-                        f.write(log_entry)
-                        insert_log(current_time, camera.ip, self.last_counts[i]['in'], exited, currently_in)
+            # Find the index of the camera
+            camera_index = self.cameras.index(camera)
 
-                    self.last_counts[i] = {'in': entered, 'out': exited}
+            if entered > self.last_counts[camera_index]['in']:
+                log_entry = f"{current_time}, Camera {camera_index + 1}, person entered (Occupancy: {currently_in})\n"
+                self.append_to_events_log(log_entry)
+                insert_log(current_time, camera.ip, entered, self.last_counts[camera_index]['out'], currently_in)
 
-            time.sleep(1)
+            if exited > self.last_counts[camera_index]['out']:
+                log_entry = f"{current_time}, Camera {camera_index + 1}, person exited (Occupancy: {currently_in})\n"
+                self.append_to_events_log(log_entry)
+                insert_log(current_time, camera.ip, self.last_counts[camera_index]['in'], exited, currently_in)
 
-    def check_midnight(self):
-        while True: 
-            now = datetime.now()
-            if now.hour == 0 and now.minute == 0:
-                self.create_log_file()
-            time.sleep(60)
+            self.last_counts[camera_index] = {'in': entered, 'out': exited}
+
+            time.sleep(1)  # Adjust the sleep time as necessary
+
+    def append_to_events_log(self, entry):
+        """Append an entry to the events log section."""
+        with open(self.current_log_file, "a") as f:
+            f.write(entry)
+
+    def add_camera_to_log(self, camera):
+        """Add a new camera and start logging its data."""
+        self.cameras.append(camera)
+        self.last_counts.append({'in': 0, 'out': 0})  # Initialize last counts for the new camera
+
+        # Append new camera details to the log file
+        with open(self.current_log_file, "a") as f:
+            f.write(f"Camera {len(self.cameras)} = {camera.ip}\n")  # Update log with the new camera
+        
+        self.start_logging(camera)  # Start a new logging thread for the new camera
 
 def start_logging(cameras):
+    """Function to initialize the logger and start logging for the provided cameras."""
     logger = Logger(cameras)
-    threading.Thread(target=logger.log_data, daemon=True).start()
-    threading.Thread(target=logger.check_midnight, daemon=True).start()
+    return logger  # Return the logger instance
