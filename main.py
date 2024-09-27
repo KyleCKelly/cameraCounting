@@ -59,53 +59,59 @@ class Dashboard:
         self.master = master
         self.master.title("People Counting Dashboard")
         self.master.configure(bg="#d1d07d")
-        self.cameras = cameras
+        self.cameras = cameras  # This is the main list of cameras
         self.occupancy_limit = occupancy_limit
-        self.logger = logger  # Store reference to the logger
-        self.is_flashing = False  # Track whether we're in a flash period
+        self.logger = logger
+        self.is_flashing = False
 
         # Create the total occupancy display with full width and solid background from top down
         self.total_frame = Frame(master, bg="#72a160", bd=0, relief="ridge")
-        self.total_frame.grid(row=0, column=0, columnspan=len(self.cameras) + 1, sticky="nsew", padx=0, pady=0)
+        self.total_frame.grid(row=0, column=0, columnspan=4, sticky="nsew", padx=0, pady=0)
 
         self.total_currently_in_label = Label(self.total_frame, text="Current Occupancy: 0", bg="#72a160", fg="white", font=("Helvetica", 24))
         self.total_currently_in_label.pack(fill="both", expand=True)
 
-        # Only display occupancy limit if it was provided
         if self.occupancy_limit:
             self.occupancy_limit_label = Label(self.total_frame, text=f"Occupancy Limit: {self.occupancy_limit}", bg="#72a160", fg="white", font=("Helvetica", 12))
             self.occupancy_limit_label.pack(side="bottom", pady=5)
         else:
             self.occupancy_limit_label = None
 
-        # Dynamically adjust columns to span all cameras
-        self.master.grid_columnconfigure(0, weight=1)  # Ensure dynamic resizing of the occupancy box
-
         self.camera_frames = []
         self.camera_labels = []
+        self.add_camera_frame = None
 
+        # Initialize with any provided cameras
         self.create_camera_boxes()
-        self.add_camera_button()  # Ensure the button is added here
+
+        # Start updating the camera data every UPDATE_INTERVAL
         self.update_counts()
 
     def create_camera_boxes(self):
-        """Create dynamically arranged camera info boxes."""
-        num_cameras = len(self.cameras)
-        columns = min(num_cameras + 1, 4)  # +1 to include the "Add Camera" button
+        """Create camera boxes and ensure the 'Add Camera' button is properly placed."""
+        # Clear previous camera frames
+        for frame in self.camera_frames:
+            frame.grid_forget()
+        self.camera_frames.clear()
+        self.camera_labels.clear()
 
-        # Update the span of the occupancy box to include all columns
+        # Clear the "Add Camera" button
+        if self.add_camera_frame:
+            self.add_camera_frame.grid_forget()
+
+        num_cameras = len(self.cameras)
+        columns = min(num_cameras + 1, 4)
+
+        # Update the span of the green occupancy box
         self.total_frame.grid_configure(columnspan=columns)
 
-        # Reset the grid for existing cameras
-        for frame in self.camera_frames:
-            frame.grid_forget()  # Clear old frames
-
-        self.camera_frames = []  # Clear the current frames list
-        self.camera_labels = []  # Clear the camera labels list
-
+        # Add the camera frames
         for i, camera in enumerate(self.cameras):
+            row = (i // columns) + 1
+            column = i % columns
+
             frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
-            frame.grid(row=(i // columns) + 1, column=i % columns, sticky="nsew", padx=10, pady=10)
+            frame.grid(row=row, column=column, sticky="nsew", padx=10, pady=10)
 
             cam_label = {
                 'ip': Label(frame, text=f"Camera {i + 1}", bg="#FF964F", fg="white", font=("Helvetica", 12, "bold")),
@@ -119,19 +125,24 @@ class Dashboard:
             self.camera_frames.append(frame)
             self.camera_labels.append(cam_label)
 
-        # Dynamically adjust column weight based on the number of cameras
-        for i in range(columns):
-            self.master.grid_columnconfigure(i, weight=1, uniform="column")
+        # Add the "Add Camera" button in the next available slot
+        self.add_camera_button()
 
     def add_camera_button(self):
-        """Add a button for adding a new camera."""
-        add_camera_frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
-        add_camera_frame.grid(row=(len(self.cameras) // 4) + 1, column=len(self.cameras) % 4, sticky="nsew", padx=10, pady=10)
+        """Add a button for adding a new camera in the next available slot."""
+        num_cameras = len(self.cameras)
+        columns = min(num_cameras + 1, 4)
 
-        add_camera_label = Label(add_camera_frame, text="+", bg="#FF964F", fg="white", font=("Helvetica", 36, "bold"))
+        row = (num_cameras // columns) + 1
+        column = num_cameras % columns
+
+        self.add_camera_frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
+        self.add_camera_frame.grid(row=row, column=column, sticky="nsew", padx=10, pady=10)
+
+        add_camera_label = Label(self.add_camera_frame, text="+", bg="#FF964F", fg="white", font=("Helvetica", 36, "bold"))
         add_camera_label.pack(fill="both", expand=True)
 
-        add_camera_button = Button(add_camera_frame, text="Add Camera", command=self.add_camera)
+        add_camera_button = Button(self.add_camera_frame, text="Add Camera", command=self.add_camera)
         add_camera_button.pack(fill="x", padx=5, pady=5)
 
     def add_camera(self):
@@ -142,21 +153,23 @@ class Dashboard:
 
         if ip and username and password:
             new_camera = Camera(ip, username, password)
-            self.cameras.append(new_camera)  # Add new camera to the list
-            self.create_camera_boxes()  # Re-create camera boxes to reflect the new addition
+
+            # Prevent adding duplicate cameras
+            self.cameras.append(new_camera)
+            self.create_camera_boxes()
 
             # Notify logger to update log for the new camera
             if self.logger:
-                self.logger.add_camera_to_log(new_camera)  # Start logging for the new camera
+                self.logger.add_camera_to_log(new_camera)
 
     def update_counts(self):
+        """Update the counts of entered, exited, and currently in for all cameras."""
         total_currently_in = 0
 
         for i, camera in enumerate(self.cameras):
             entered, exited, currently_in = camera.get_counts()
             total_currently_in += currently_in
 
-            # Ensure that we don't try to update more labels than exist
             if i < len(self.camera_labels):
                 self.camera_labels[i]['entered'].config(text=f"Entered: {entered}")
                 self.camera_labels[i]['exited'].config(text=f"Exited: {exited}")
@@ -164,21 +177,21 @@ class Dashboard:
         # Update the total occupancy box
         self.total_currently_in_label.config(text=f"Current Occupancy: {total_currently_in}")
 
-        # Check every 2 seconds and flash red for 1 second if over the limit
+        # Flash red if over limit
         if self.occupancy_limit and total_currently_in > self.occupancy_limit:
             if not self.is_flashing:
-                self.flash_red_background()  # Start flashing red for 1 second
-                self.is_flashing = True  # Mark that we're in a flash period
-                self.master.after(FLASH_DURATION, self.reset_to_green)  # Reset to green after 1 second
+                self.flash_red_background()
+                self.is_flashing = True
+                self.master.after(FLASH_DURATION, self.reset_to_green)
         else:
-            self.reset_to_green()  # Ensure it's green when under limit
+            self.reset_to_green()
 
-        # Check again in 2 seconds
+        # Schedule the next update
         self.master.after(UPDATE_INTERVAL * 1000, self.update_counts)
 
     def flash_red_background(self):
         """Set the background to red when over limit."""
-        self.total_frame.config(bg="#eb3b3b")  # Flash red
+        self.total_frame.config(bg="#eb3b3b")
         self.total_currently_in_label.config(bg="#eb3b3b")
         if self.occupancy_limit_label:
             self.occupancy_limit_label.config(bg="#eb3b3b")
@@ -186,7 +199,7 @@ class Dashboard:
     def reset_to_green(self):
         """Reset the background to green after flashing or if occupancy is under the limit."""
         self.is_flashing = False
-        self.total_frame.config(bg="#72a160")  # Set it to green
+        self.total_frame.config(bg="#72a160")
         self.total_currently_in_label.config(bg="#72a160")
         if self.occupancy_limit_label:
             self.occupancy_limit_label.config(bg="#72a160")
@@ -236,6 +249,7 @@ if __name__ == "__main__":
     cameras, occupancy_limit = get_camera_details()
     if cameras:
         root = tk.Tk()
+        root.title("People Counting Dashboard")
         logger = start_logging(cameras)  # Get logger reference
         app = Dashboard(root, cameras, occupancy_limit, logger)
         root.mainloop()

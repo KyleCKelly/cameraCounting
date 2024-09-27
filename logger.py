@@ -1,3 +1,5 @@
+# logger.py
+
 import os
 import time
 from datetime import datetime
@@ -6,15 +8,15 @@ from database import insert_log
 
 class Logger:
     def __init__(self, cameras, log_dir="logs"):
-        self.cameras = cameras
+        self.cameras = cameras  # Reference, don't modify
         self.log_dir = log_dir
         self.current_log_file = None
         self.create_log_file()
-        self.last_counts = [{'in': 0, 'out': 0} for _ in cameras]
+        self.last_counts = [{'in': 0, 'out': 0} for _ in self.cameras]
         self.logging_threads = []
 
         for camera in cameras:
-            self.start_logging(camera)  # Start logging for each camera on initialization
+            self.start_logging(camera)
 
     def create_log_file(self):
         if not os.path.exists(self.log_dir):
@@ -42,7 +44,6 @@ class Logger:
             current_time = datetime.now().strftime("%H:%M:%S")
             entered, exited, currently_in = camera.get_counts()
 
-            # Find the index of the camera
             camera_index = self.cameras.index(camera)
 
             if entered > self.last_counts[camera_index]['in']:
@@ -57,7 +58,7 @@ class Logger:
 
             self.last_counts[camera_index] = {'in': entered, 'out': exited}
 
-            time.sleep(1)  # Adjust the sleep time as necessary
+            time.sleep(1)
 
     def append_to_events_log(self, entry):
         """Append an entry to the events log section."""
@@ -65,17 +66,17 @@ class Logger:
             f.write(entry)
 
     def add_camera_to_log(self, camera):
-        """Add a new camera and start logging its data."""
-        self.cameras.append(camera)
+        """Reference the camera but don't append it to self.cameras here!"""
+        # Start logging for the new camera
         self.last_counts.append({'in': 0, 'out': 0})  # Initialize last counts for the new camera
 
         # Append new camera details to the log file
         with open(self.current_log_file, "a") as f:
-            f.write(f"Camera {len(self.cameras)} = {camera.ip}\n")  # Update log with the new camera
+            f.write(f"Camera {len(self.last_counts)} = {camera.ip}\n")  # Update log with the new camera
         
-        self.start_logging(camera)  # Start a new logging thread for the new camera
+        self.start_logging(camera)
 
 def start_logging(cameras):
-    """Function to initialize the logger and start logging for the provided cameras."""
+    """Initialize and start logging for the provided cameras."""
     logger = Logger(cameras)
-    return logger  # Return the logger instance
+    return logger
