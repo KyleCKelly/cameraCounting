@@ -84,6 +84,10 @@ class Dashboard:
         # Initialize with any provided cameras
         self.create_camera_boxes()
 
+        # Add the "Export Config" button
+        self.export_button = Button(master, text="Export Config", command=self.export_config)
+        self.export_button.grid(row=1, column=0, pady=10)
+
         # Start updating the camera data every UPDATE_INTERVAL
         self.update_counts()
 
@@ -107,7 +111,7 @@ class Dashboard:
 
         # Add the camera frames
         for i, camera in enumerate(self.cameras):
-            row = (i // columns) + 1
+            row = (i // columns) + 2
             column = i % columns
 
             frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
@@ -122,6 +126,10 @@ class Dashboard:
             cam_label['entered'].pack(fill="x", padx=5, pady=5)
             cam_label['exited'].pack(fill="x", padx=5, pady=5)
 
+            # Add the remove ("-") button in the top right corner of each camera frame
+            remove_button = Button(frame, text="-", command=lambda idx=i: self.remove_camera(idx))
+            remove_button.place(relx=0.9, rely=0.1, anchor="center")
+
             self.camera_frames.append(frame)
             self.camera_labels.append(cam_label)
 
@@ -133,7 +141,7 @@ class Dashboard:
         num_cameras = len(self.cameras)
         columns = min(num_cameras + 1, 4)
 
-        row = (num_cameras // columns) + 1
+        row = (num_cameras // columns) + 2
         column = num_cameras % columns
 
         self.add_camera_frame = Frame(self.master, bg="#FF964F", bd=5, relief="ridge")
@@ -161,6 +169,27 @@ class Dashboard:
             # Notify logger to update log for the new camera
             if self.logger:
                 self.logger.add_camera_to_log(new_camera)
+
+    def remove_camera(self, index):
+        """Remove a camera from the dashboard."""
+        del self.cameras[index]
+        self.create_camera_boxes()
+
+    def export_config(self):
+        """Export the current camera configuration to a JSON file."""
+        config_data = {
+            "cameras": [
+                {
+                    "ip": camera.ip,
+                    "username": camera.username,
+                    "password": camera.password
+                } for camera in self.cameras
+            ]
+        }
+        config_file_path = os.path.join(os.getcwd(), 'camera_config.json')
+        with open(config_file_path, 'w') as config_file:
+            json.dump(config_data, config_file, indent=4)
+        messagebox.showinfo("Export Config", f"Configuration exported to {config_file_path}")
 
     def update_counts(self):
         """Update the counts of entered, exited, and currently in for all cameras."""
