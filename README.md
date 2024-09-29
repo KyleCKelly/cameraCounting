@@ -10,6 +10,9 @@ This is a **People Counting Dashboard** built with Python and Tkinter. The dashb
 - **Logging** of camera events to a text file and SQLite database.
 - **Support for multiple cameras** and the ability to add new cameras dynamically at runtime.
 - **Config file support** to load camera details automatically.
+- **Export config support** to generate new config files based on current setup
+- **Remove cameras** to take cameras off of the dashboard
+- **Manual count reset** to send API calls to reset the counts for all cameras at once
 
 ## Requirements
 
@@ -17,7 +20,7 @@ This is a **People Counting Dashboard** built with Python and Tkinter. The dashb
 - Tkinter (for GUI)
 - `requests` (for API communication)
 - SQLite3 (for logging)
-  
+
 To install dependencies, run:
 bash
 pip install requests
@@ -26,7 +29,6 @@ Clone the repository:
 bash
 git clone https://github.com/yourusername/cameraCounting.git
 cd cameraCounting
-
 
 On startup, you can either:
 
@@ -37,11 +39,9 @@ The dashboard will show the current occupancy, with separate boxes for each came
 
 Optionally set a total occupancy limit. The dashboard will flash red when the limit is exceeded.
 
-
 Run the main Python file to start the dashboard:
 bash
 python main.py
-
 
 JSON Config Format
 
@@ -50,18 +50,18 @@ You can load a config file with the following format to automatically load camer
 json
 
 {
-  "cameras": [
-    {
-      "ip": "10.1.1.224",
-      "username": "admin",
-      "password": "password123"
-    },
-    {
-      "ip": "10.1.1.55",
-      "username": "admin",
-      "password": "password123"
-    }
-  ]
+"cameras": [
+{
+"ip": "<ip>",
+"username": "<user>",
+"password": "<pass>"
+},
+{
+"ip": "<ip>",
+"username": "<user>",
+"password": "<pass>"
+}
+]
 }
 
 Features in Detail
@@ -82,9 +82,9 @@ Logging Format
 
 Each log file is saved in the logs/ directory and follows this format:
 Camera IPs:
-Camera 1 = 10.1.1.224
-Camera 2 = 10.1.1.55
+Camera 1 = IP
+Camera 2 = IP
 
-23:05:03, Camera 1, person entered (Occupancy: 5)
-23:06:33, Camera 1, person exited (Occupancy: 4)
-23:07:12, Camera 2, person entered (Occupancy: 3)
+23:05:03, Camera 1, person entered (Occupancy: X)
+23:06:33, Camera 1, person exited (Occupancy: X-1)
+23:07:12, Camera 2, person entered (Occupancy: X+1)
